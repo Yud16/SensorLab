@@ -1,5 +1,5 @@
 version: '3'
-
+# reference: https://www.emqx.com/en/blog/how-to-use-mqtt-in-nodejs
 services:
   emqx1:
     image: emqx/emqx-enterprise:6.2.2
@@ -23,9 +23,38 @@ services:
       - 8084:8084
       - 8883:8883
       - 18083:18083
-    # volumes:
-    #   - $PWD/emqx1_data:/opt/emqx/data
+    volumes:
+      - $PWD/emqx1_data:/opt/emqx/data
 
+
+  # reference: https://oneuptime.com/blog/post/2026-02-08-how-to-run-timescaledb-in-docker-with-hypertables/view
+  timescaledb:
+    image: timescale/timescaledb-ha:pg18
+    container_name: timescaledb
+    restart: unless-stopped
+    ports:
+      - "6543:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Disable TimescaleDB telemetry
+      TIMESCALEDB_TELEMETRY: "off"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tsadmin -d tsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+volumes:
+  timescaledb_data:
+    driver: local
   # emqx2:
   #   image: emqx/emqx-enterprise:6.2.2
   #   container_name: emqx2
@@ -48,3 +77,4 @@ services:
 networks:
   emqx-bridge:
     driver: bridge
+

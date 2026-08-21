@@ -1,6 +1,14 @@
 # Dependencies
 node_modules/
 # Env Vars
+.env
+.env.local
+
+# Next.js
+.next/
+
+# EMQX broker runtime data
+emqx1_data/
 
 # Logs
 
