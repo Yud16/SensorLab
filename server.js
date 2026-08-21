@@ -1,7 +1,28 @@
+require('dotenv').config()
+
+const http = require('http')
 const express = require('express')
+const cors = require('cors')
+const { Server } = require('socket.io')
 const mqtt = require('mqtt')
+const pool = require('./db')
 
 const app = express()
+app.use(cors())
+
+const httpServer = http.createServer(app)
+const io = new Server(httpServer, {
+    cors: {
+        origin: 'http://localhost:3001',
+    },
+})
+
+io.on('connection', (socket) => {
+    console.log('Dashboard connected:', socket.id)
+    socket.on('disconnect', () => {
+        console.log('Dashboard disconnected:', socket.id)
+    })
+})
 
 // MQTT TCP Connection
 const protocol = 'mqtt'
@@ -20,10 +41,7 @@ const client = mqtt.connect(connectUrl, {
     reconnectPeriod: 1000,
 })
 
-// Subbing to a topic
-client.on('connect', ()=>{
-    console.log('Connected')
-})
+const SENSOR_IDS = ['sensor-01', 'sensor-02', 'sensor-03', 'sensor-04', 'sensor-05']
 
 app.use(function(req, res, next) {
     //publish
@@ -42,18 +60,39 @@ app.use(function(req, res, next) {
 next()
 })
 
+// Subbing to a topic
+client.on('connect', ()=>{
+    console.log('Connected')
+    for (const sensorId of SENSOR_IDS) {
+        client.subscribe(`sensors/${sensorId}/readings`)
+    }
+})
+
+
+
 app.get('/', (req, res) => {
-    req.mqttPublish('test', 'hello mqtt!')
-
-    req.mqttSubscribe('test', (message) => {
-        console.log('Received message:', message)
-    })
-
+    //req.mqttPublish('test', 'hello mqtt!')
     res.send('MQTT working')
 })
 
-client.on('message', (topic, payload) => {
-    console.log('Received Message:', topic, payload.toString())
+client.on('message', async (topic, payload) => {
+    let data
+    try {
+        data = JSON.parse(payload.toString())
+    } catch (error) {
+        console.error('Error parsing JSON:', error)
+        return
+    }
+    try {
+        await pool.query(
+            'INSERT INTO sensor_readings ("time", sensor_id, temperature, vibration, battery) VALUES ($1, $2, $3, $4, $5)',
+            [data.timestamp, data.sensorId, data.temperature, data.vibration, data.battery]
+        )
+        console.log('Data inserted into database')
+        io.emit('reading', data)
+    } catch (error) {
+        console.error('Error inserting data into database:', error)
+    }
 })
 
 client.on('error', (err)=>{
@@ -64,24 +103,10 @@ client.on('reconnect', (error) => {
   console.error('reconnect failed', error)
 })
 
+const sensorRouter = require('./routes/sensors')
 
+app.use('/sensors', sensorRouter)
 
-// app.use(express.static("public"))
-// app.use(express.urlencoded({ extended: true }))
-// app.use(express.json())
-// app.set('view engine', 'ejs')
-
-
-
-// const userRouter = require('./routes/users')
-
-// app.use('/users', userRouter)
-
-// function logger(req, res, next) {
-//     console.log(req.originalUrl)
-//     next()
-// }
-
-app.listen(3000, () => {
+httpServer.listen(3000, () => {
     console.log('Server is running on http://localhost:3000')
 })
