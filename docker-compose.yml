@@ -52,6 +52,67 @@ services:
         limits:
           memory: 2G
           cpus: "2.0"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      POSTGRES_HOST: timescaledb
+      POSTGRES_PORT: 5432
+      MQTT_HOST: emqx1
+      MQTT_PORT: 1883
+    depends_on:
+      emqx1:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks:
+      - default
+      - emqx-bridge
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3000
+    container_name: frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3001:3001"
+
+  # simulator:
+  #   build:
+  #     context: .
+  #     dockerfile: simulator/Dockerfile
+  #   container_name: simulator
+  #   restart: unless-stopped
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     POSTGRES_HOST: timescaledb
+  #     POSTGRES_PORT: 5432
+  #     MQTT_HOST: emqx1
+  #     MQTT_PORT: 1883
+  #   depends_on:
+  #     emqx1:
+  #       condition: service_healthy
+  #     timescaledb:
+  #       condition: service_healthy
+  #   networks:
+  #     - default
+  #     - emqx-bridge
+
 volumes:
   timescaledb_data:
     driver: local

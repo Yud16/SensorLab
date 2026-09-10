@@ -26,8 +26,8 @@ io.on('connection', (socket) => {
 
 // MQTT TCP Connection
 const protocol = 'mqtt'
-const host = 'localhost'
-const port = '1883'
+const host = process.env.MQTT_HOST || 'localhost'
+const port = process.env.MQTT_PORT || '1883'
 const clientId = `mqtt_${Math.random().toString(16).slice(3)}`
 
 const connectUrl = `${protocol}://${host}:${port}`
@@ -36,12 +36,10 @@ const client = mqtt.connect(connectUrl, {
     clientId,
     clean: true, 
     connectTimeout: 4000,
-    username: 'emqx',
-    password: 'public',
+    username: process.env.MQTT_USERNAME || 'emqx',
+    password: process.env.MQTT_PASSWORD || 'public',
     reconnectPeriod: 1000,
 })
-
-const SENSOR_IDS = ['sensor-01', 'sensor-02', 'sensor-03', 'sensor-04', 'sensor-05']
 
 app.use(function(req, res, next) {
     //publish
@@ -61,9 +59,10 @@ next()
 })
 
 // Subbing to a topic
-client.on('connect', ()=>{
+client.on('connect', async () => {
     console.log('Connected')
-    for (const sensorId of SENSOR_IDS) {
+    const { rows } = await pool.query('SELECT id FROM sensors')
+    for (const { id: sensorId } of rows) {
         client.subscribe(`sensors/${sensorId}/readings`)
     }
 })
@@ -102,6 +101,16 @@ client.on('error', (err)=>{
 client.on('reconnect', (error) => {
   console.error('reconnect failed', error)
 })
+
+if (process.env.NODE_ENV !== 'production') {
+    app.use((req, res, next) => {
+        const userId = req.header('x-user-id')
+        if (userId) {
+            req.user = { id: Number(userId) }
+        }
+        next()
+    })
+}
 
 const sensorRouter = require('./routes/sensors')
 
